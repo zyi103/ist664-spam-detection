@@ -1,4 +1,4 @@
-# Final Project Summary Report
+Final Project Summary Report
 
 Author: *Zijun Yi*
 
@@ -6,15 +6,15 @@ Course: IST 664
 
 ## Project introduction
 
-This project is for course IST 664 Natural Langurage Processing. I pick one of the the three data set, The Enron Public email corpus. It's labelled with `Spam` and `Ham`. I am going to use package `NLTK`, `Sklearn` and `pandas` to create Navie Bayes Classification model to analysis and classify spam email and non-spam email.
+This project is for course IST 664 Natural Language Processing. I pick one of the the three data set, The Enron Public email corpus. It's labeled with `Spam` and `Ham`. I am going to use package `NLTK`, `regex` and `Sklearn` to create Navies Bayes Classification model to analysis and classify Spam email and non-Spam email.
 
-I also created a public github repo, which contains all the code and data.
+I also created a public github repo, which contains all the code and data:
 
-
+*https://github.com/zyi103/ist664-spam-detection*
 
 ### Data Exploration
 
-The dataset contains 3672 ham(non-spam) email, and 1500 spam email. 
+The dataset contains 3672 ham(non-Spam) email, and 1500 Spam email. 
 
 ```python
 print('number of email in ham folder: ',len(os.listdir('ham')))
@@ -24,76 +24,35 @@ print('number of email in spam folder: ',len(os.listdir('spam')))
 `number of email in ham folder:  3672`
 `number of email in spam folder:  1500`
 
-## Data Processing 
+## Data Processing/Cleaning 
 
-The assignment come with a breif template, which includes a function that read the file from the local directory. 
+The assignment come with a brief template, which includes a function that read the file from the local directory. There is problem with how it picked documents between Spam and Ham, which I will address later.
 
-```python
-# open python and nltk packages needed for processing
-import sys
-import random
-import nltk
-import pandas as pd
-from nltk.corpus import stopwords
-from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer, TfidfTransformer
-from sklearn.model_selection import train_test_split
-from sklearn.naive_bayes import MultinomialNB
-from sklearn.pipeline import Pipeline
-from sklearn.metrics import classification_report, ConfusionMatrixDisplay, confusion_matrix
-import matplotlib.pyplot as plt
-import re
-from collections import defaultdict
-
-```
-
+First we are going to used the `word_tokenizer` from `NLTK` package, which will create a bag-of-words here we will call it `tokens`. Next step will be filter out the numbers, punctuation and function words. We will use the `regex.sub` function for filtering numbers and punctuations, and `nltk.stopwords` for function words. Below is an example for Spam email, and we will do the same for Ham.
 
 ```python
-# function to read spam and ham files, train and test a classifier
-def processspamham(spam_limit = 1500, ham_limit = 3672):
-    # convert the limit argument from a string to an int
-    # limit = int(limitStr)
-
-    # start lists for spam and ham email texts
-    hamtexts = []
-    spamtexts = []
-    # process all files in directory that end in .txt up to the limit
-    #    assuming that the emails are sufficiently randomized
-    for file in os.listdir("./spam"):
-         if (file.endswith(".txt")) and (len(spamtexts) < spam_limit):
-            # open file for reading and read entire file into a string
-            f = open("./spam/" + file, 'r', encoding="latin-1")
-            spamtexts.append(f.read())
-            f.close()
-    for file in os.listdir("./ham"):
-         if (file.endswith(".txt")) and (len(hamtexts) < ham_limit):
-            # open file for reading and read entire file into a string
-            f = open("./ham/" + file, 'r', encoding="latin-1")
-            hamtexts.append(f.read())
-            f.close()
-
-    # possibly filter tokens
-    regex = re.compile('[\W+]|[\d+]')        
-    stop_words = set(stopwords.words('english')) 
-        
-    # create list of mixed spam and ham email documents as (list of words, label)
-    emaildocs = []
-    # add all the spam
-    for spam in spamtexts:
-        tokens = nltk.word_tokenize(regex.sub(' ',spam))
-        clean_tokens = [w for w in tokens if not w in stop_words]
-        emaildocs.append((clean_tokens, 'spam'))
-    # add all the regular emails
-    for ham in hamtexts:
-        tokens = nltk.word_tokenize(regex.sub(' ', ham))
-        clean_tokens = [w for w in tokens if not w in stop_words]
-        emaildocs.append((clean_tokens, 'ham'))
-
-    # randomize the list
-    random.shuffle(emaildocs)
-    return pd.DataFrame(emaildocs,columns=["tokens","label"])
-
+# use regex to filter now word phares
+regex = re.compile('[\W+]|[\d+]')        
+stop_words = set(stopwords.words('english')) 
     
+# create list of mixed spam and ham email documents as (list of words, label)
+emaildocs = []
+# add all the spam
+for spam in spamtexts:
+    tokens = nltk.word_tokenize(regex.sub(' ',spam))
+    clean_tokens = [w for w in tokens if not w in stop_words]
+    emaildocs.append((clean_tokens, 'spam'))
 ```
+
+
+
+## Feature engineering
+
+For this Spam filter, I would like to use the method of TF-IDF, which stand for term frequency–inverse document frequency. To be able to do that we will need to actualizes the words into counts then calculate the term frequency and compare it to the document frequency. 
+$$
+{\displaystyle \mathrm {tf} (t,d)={\frac {f_{t,d}}{\sum _{t'\in d}{f_{t',d}}}}}
+$$
+It's a lot of process, but luckily we will be able to under the `sklearn` package which come with the process predefined. However, in the homework we are asked to not use the Vectorizor from `klearn`. There for we are going to write a function that does that. The function `processspamham()` will return a panda data frame that contains the vector and labels. We will use that and create a directory called features and add count all the tokens. 
 
 
 ```python
@@ -102,36 +61,30 @@ def vectorize(tokens):
     for token in tokens:
         features[token] += 1
     return features
-
    
 def vectorlizedspamham(spam_limit = 1500, ham_limit = 3672):
     emails = processspamham(spam_limit, ham_limit)
     vector = map(vectorize, emails.tokens.tolist())
-            
-    return pd.DataFrame(vector).fillna(0), emails.label.tolist()
-    
+    return pd.DataFrame(vector).fillna(0), emails.label.tolist()  
 ```
 
+Next we will feed it into the `sklearn` pipeline, which have two steps the `TfidfTransformer` and `MultinomialNB`, which is the Naive Bayes Classifier. 
 
 ```python
-X, y = vectorlizedspamham()
-
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.33)
-
-pipeline = Pipeline([('tfid', TfidfTransformer()),
-                     ('nbc', MultinomialNB())]).fit(X_train,y_train)
-
-y_pred = pipeline.predict(X_test)
-
-print(classification_report(y_test, y_pred))
-
-labels = pipeline.steps[-1][1].classes_
-cm = confusion_matrix(y_test, y_pred, labels=labels)
-disp = ConfusionMatrixDisplay(confusion_matrix=cm,
-                            display_labels=labels)
-disp.plot()
-plt.show()
+Pipeline([('tfidf', TfidfTransformer()),
+          ('nbc', MultinomialNB())]).fit(X_train,y_train)
 ```
+
+
+
+## Data Modeling 
+
+The first model I used all the data, 
+
+`number of email in ham folder:  3672`
+`number of email in spam folder:  1500`
+
+We got an accuracy of .90, but for a spam filter, what we want to look at is the recall.
 
                   precision    recall  f1-score   support
     
@@ -142,36 +95,12 @@ plt.show()
        macro avg       0.94      0.83      0.86      1707
     weighted avg       0.91      0.90      0.89      1707
 
+![png](final-project-spam-email.assets/output_5_1.png )
+
+For Ham we got 1.00 and for Spam we got 0.65. We achieved 0 false negative, which is impressive. The Spam filter is not that accurate at detecting Spam, but it's really good at finding Ham email. Therefore, base on this test hot of 1700 emails we didn't get any false negative. This also means if there is an important email we are not gonna accidentally classify it as Spam.
 
 
-
-​    
-![png](output_5_1.png)
-​    
-
-
-There is one intesting things I have noted while editing the preprocessing function given with the homework. The function will take a limit with apply to both `spam` and `ham` emails. This would make sense if we are trying to save processing power. However we also will run in to problems like different distribution of the input data. Natually the number of spam we get will be much lesser than real emails. 1500/3672, in this case. If we munipulate the ratio, the model won't be less accuarte in real production environment. Here is an example:
-
-
-```python
-X2, y2 = vectorlizedspamham(500,500)
-
-
-X_train2, X_test2, y_train2, y_test2 = train_test_split(X2, y2, test_size=0.33)
-
-pipeline2 = Pipeline([('tfid', TfidfTransformer()),
-                      ('nbc', MultinomialNB())]).fit(X_train2,y_train2)
-
-y_pred2 = pipeline2.predict(X_test2)
-
-print(classification_report(y_test2, y_pred2))
-
-cm2 = confusion_matrix(y_test2, y_pred2, labels=labels)
-disp2 = ConfusionMatrixDisplay(confusion_matrix=cm2,
-                            display_labels=labels)
-disp2.plot()
-plt.show()
-```
+There is one interesting thing I have noted while editing the preprocessing function given with the homework. The function will take a limit which apply to both `spam` and `ham` emails. This would make sense if we are trying to save processing power. However we also will run in to problems like different distribution of the input data. Naturally the number of Spam we get will be much lesser than real emails. 1500/3672, in this case. If we manipulate the ratio, the model won't be less accurate in real production environment. Here is an example from `vectorlizedspamham(500,500)`  a total of 1000 email with half Spam and half ham:
 
                   precision    recall  f1-score   support
     
@@ -183,44 +112,9 @@ plt.show()
     weighted avg       0.92      0.92      0.92       330
 
 
+![png](final-project-spam-email.assets/output_7_1.png)
 
-
-​    
-![png](output_7_1.png)
-​    
-
-
-
-```python
-def dummy(tokens):
-    return tokens
-
-downsampled_emails = processspamham(500,500)
-
-X3 = downsampled_emails.tokens.tolist()
-y3 = downsampled_emails.label.tolist()
-
-emails = processspamham()
-X4 = emails.tokens.tolist()
-y4 = emails.label.tolist()
-
-X_train3, X_test3, y_train3, y_test3 = train_test_split(X3, y3, test_size=0.33)
-X_train4, X_test4, y_train4, y_test4 = train_test_split(X4, y4, test_size=0.33)
-
-pipeline3 = Pipeline([('count', CountVectorizer(tokenizer=dummy, preprocessor=dummy)),
-                      ('tfid', TfidfTransformer()),
-                      ('nbc', MultinomialNB())]).fit(X_train3,y_train3)
-
-y_pred4 = pipeline3.predict(X_test4)
-
-print(classification_report(y_test4, y_pred4))
-
-cm4 = confusion_matrix(y_test4, y_pred4, labels=labels)
-disp4 = ConfusionMatrixDisplay(confusion_matrix=cm4,
-                            display_labels=labels)
-disp4.plot()
-plt.show()
-```
+Although the accuracy is higher with 0.92, the recall on ham had decreased, which means there is a 8% chance we mis-classify a good email in Spam. This seems too high of a error rate. Next just to demonstrate the problem of changing the ratio on the train set we are going to use the model we just trained for above plot:
 
                   precision    recall  f1-score   support
     
@@ -231,357 +125,14 @@ plt.show()
        macro avg       0.96      0.96      0.96      1707
     weighted avg       0.97      0.97      0.97      1707
 
-
-
-
-​    
-![png](output_8_1.png)
 ​    
 
+![png](final-project-spam-email.assets/output_8_1.png)
 
+   
 
-```python
-X2
-```
+Also one important things I have realized is that words like Subject, To, CC, etc., which come with all the e-mails. Would be included in all the documents. Like the table below, All the email starts with Subjects, I could filter them out using regex in data cleaning. However, since we are going to use the TF-IDF method, all subject will have the equal number and end up with 0. 
 
-
-
-
-<div>
-<style scoped>
-    .dataframe tbody tr th:only-of-type {
-        vertical-align: middle;
-    }
-
-    .dataframe tbody tr th {
-        vertical-align: top;
-    }
-    
-    .dataframe thead th {
-        text-align: right;
-    }
-</style>
-<table border="1" class="dataframe">
-  <thead>
-    <tr style="text-align: right;">
-      <th></th>
-      <th>Subject</th>
-      <th>investment</th>
-      <th>idea</th>
-      <th>oi</th>
-      <th>gas</th>
-      <th>advisory</th>
-      <th>oil</th>
-      <th>entered</th>
-      <th>ong</th>
-      <th>term</th>
-      <th>...</th>
-      <th>pot</th>
-      <th>phoenican</th>
-      <th>ino</th>
-      <th>drunk</th>
-      <th>progressive</th>
-      <th>pots</th>
-      <th>refuse</th>
-      <th>phoenicianl</th>
-      <th>marcia</th>
-      <th>resumel</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <th>0</th>
-      <td>1</td>
-      <td>3.0</td>
-      <td>1.0</td>
-      <td>7.0</td>
-      <td>15.0</td>
-      <td>2.0</td>
-      <td>10.0</td>
-      <td>1.0</td>
-      <td>2.0</td>
-      <td>1.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-    </tr>
-    <tr>
-      <th>1</th>
-      <td>1</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-    </tr>
-    <tr>
-      <th>2</th>
-      <td>1</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-    </tr>
-    <tr>
-      <th>3</th>
-      <td>1</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-    </tr>
-    <tr>
-      <th>4</th>
-      <td>1</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>1.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-    </tr>
-    <tr>
-      <th>...</th>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-      <td>...</td>
-    </tr>
-    <tr>
-      <th>995</th>
-      <td>1</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-    </tr>
-    <tr>
-      <th>996</th>
-      <td>1</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>1.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-    </tr>
-    <tr>
-      <th>997</th>
-      <td>1</td>
-      <td>2.0</td>
-      <td>0.0</td>
-      <td>9.0</td>
-      <td>15.0</td>
-      <td>2.0</td>
-      <td>8.0</td>
-      <td>1.0</td>
-      <td>1.0</td>
-      <td>1.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-    </tr>
-    <tr>
-      <th>998</th>
-      <td>1</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>...</td>
-      <td>1.0</td>
-      <td>1.0</td>
-      <td>1.0</td>
-      <td>1.0</td>
-      <td>1.0</td>
-      <td>1.0</td>
-      <td>1.0</td>
-      <td>1.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-    </tr>
-    <tr>
-      <th>999</th>
-      <td>1</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>...</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>0.0</td>
-      <td>1.0</td>
-      <td>1.0</td>
-    </tr>
-  </tbody>
-</table>
-<p>1000 rows × 19176 columns</p>
-</div>
-
-
-
-
-```python
-downsampled_emails
-```
-
-
-
-
-<div>
-<style scoped>
-    .dataframe tbody tr th:only-of-type {
-        vertical-align: middle;
-    }
-
-    .dataframe tbody tr th {
-        vertical-align: top;
-    }
-    
-    .dataframe thead th {
-        text-align: right;
-    }
-</style>
 <table border="1" class="dataframe">
   <thead>
     <tr style="text-align: right;">
@@ -649,36 +200,13 @@ downsampled_emails
   </tbody>
 </table>
 <p>1000 rows × 2 columns</p>
-</div>
 
 
+## Conclusion
 
-Also one important things I have realized is that words like Subject, To, CC, etc., which come with all the e-mails. Would be included in all the documents.
+Here we will list all the highest coefficient for all the words. Although we have Subject on top, it would not effect anything in the result, each email will contain one subject as we can see from the data frame above. However, it would be a problem if we are trying to predict an email that someone typed the exact word "Subject" in the message. We will end up with a count of 2 "Subject", and this might cause the classifier the think it's a Spam.
 
-
-```python
-pipeline4 = Pipeline([('count', CountVectorizer(tokenizer=dummy, preprocessor=dummy)),
-                      ('tfidf', TfidfTransformer()),
-                      ('nbc', MultinomialNB())]).fit(X_train4,y_train4)
-
-def show_most_informative_features(vectorizer, clf, n=20):
-    feature_names = vectorizer.get_feature_names()
-    coefs_with_fns = sorted(zip(clf.coef_[0], feature_names))
-    top = zip(coefs_with_fns[:n], coefs_with_fns[:-(n + 1):-1])
-    word_list = []
-    for (coef_1, fn_1), (coef_2, fn_2) in top:
-        word_list.append(fn_2)
-        print ("\t%.4f\t%-15s" % ( coef_2, fn_2))
-    plt.figure(figsize=(12,5))
-    plt.title('Number of words appared in each email')
-    plt.boxplot(X2[word_list],showmeans=True,vert=True)
-    plt.xticks(ticks=list(range(1,21)),labels=word_list,rotation=45)
-    plt.ylim(-1,20)
-show_most_informative_features(pipeline4['count'],pipeline4['nbc'])
-```
-
-    /home/jim/anaconda3/lib/python3.7/site-packages/sklearn/utils/deprecation.py:101: FutureWarning: Attribute coef_ was deprecated in version 0.24 and will be removed in 1.1 (renaming of 0.26).
-      warnings.warn(msg, category=FutureWarning)
+The important features are "http", "com", "www". These are the link someone trying to get people to click on. This is interesting because now the website should start with "https" protocol. This means that there might be some phishing attack going on in the Spam. This is a big security risk for the company. After the website link tokens are the word "click", and it seems like the hackers are trying to get them click on the links.
 
 
     	-7.0714	Subject        
@@ -702,14 +230,11 @@ show_most_informative_features(pipeline4['count'],pipeline4['nbc'])
     	-8.2505	save           
     	-8.3105	prices         
 
+Last this is a graph on how often each words appears in the email, and I'm also checking the if there is a big difference on the counts distributed for the top words. My conclusion is there is not a big difference on each words, most of them appeared less than one time in averages, other then the word "subject".
 
 
-
-![png](output_12_2.png)
+![png](final-project-spam-email.assets/output_12_2.png)
     
 
 
 
-```python
-
-```
